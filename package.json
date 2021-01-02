@@ -1,0 +1,30 @@
+{
+  "name": "kindle-sync-telegram-bot",
+  "version": "1.0.0",
+  "description": "Kindle sync Telegram bot",
+  "main": "index.js",
+  "scripts": {
+    "dev": "nodemon index.js",
+    "node": "node index.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SiarheiLunski/kindle-sync-telegram-bot.git"
+  },
+  "author": "Siarhei Lunski <loonskai@gmail.com>",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/SiarheiLunski/kindle-sync-telegram-bot/issues"
+  },
+  "homepage": "https://github.com/SiarheiLunski/kindle-sync-telegram-bot#readme",
+  "dependencies": {
+    "dotenv": "^8.2.0",
+    "node-telegram-bot-api": "^0.51.0"
+  },
+  "devDependencies": {
+    "eslint": "^7.17.0",
+    "eslint-config-airbnb-base": "^14.2.1",
+    "eslint-plugin-import": "^2.22.1",
+    "nodemon": "^2.0.6"
+  }
+}
