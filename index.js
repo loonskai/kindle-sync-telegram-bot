@@ -21,13 +21,13 @@ const bot = new TelegramBot(TOKEN, {
 bot.setWebHook(`${HOST}/bot${TOKEN}`);
 
 bot.onText(/\/start/, (msg) => {
-  bot.sendMessage(msg.chat.id, 'Welcome', {
+  bot.sendMessage(msg.chat.id, 'Configure', {
     reply_markup: {
       inline_keyboard: [
         [
           {
             text: 'Configure',
-            switch_inline_query: 'Configure me',
+            callback_data: 'configure',
           },
         ],
       ],
@@ -35,22 +35,56 @@ bot.onText(/\/start/, (msg) => {
   });
 });
 
-bot.onText(/\/hi/, (msg) => {
-  console.log('Hello');
-  bot.sendMessage(msg.chat.id, 'Hello');
+bot.on('callback_query', (query) => {
+  const { id: callbackQueryId, data, message } = query;
+  switch (data) {
+    case 'configure':
+      bot.sendMessage(message.chat.id, 'Select configuration', {
+        reply_markup: {
+          inline_keyboard: [
+            [
+              {
+                text: 'Set Kindle email',
+                callback_data: 'set_kindle_email',
+              },
+            ],
+          ],
+        },
+      });
+      bot.answerCallbackQuery(callbackQueryId);
+      break;
+    case 'set_kindle_email':
+      bot.sendMessage(message.chat.id, 'Enter your Kindle email', {
+        reply_markup: {
+          force_reply: true,
+        },
+      });
+      bot.answerCallbackQuery(callbackQueryId);
+      break;
+    default:
+      bot.sendMessage(message.chat.id, 'Unknown operation');
+      bot.onReplyToMessage(message.chat.id);
+      bot.answerCallbackQuery(callbackQueryId);
+      break;
+  }
 });
 
 bot.onText(/\/info/, (msg) => {
   const { id: chatId } = msg.chat;
-  console.log('HELLO');
 
   bot.sendMessage(chatId, 'Info');
 });
 
 bot.on('message', (msg) => {
-  const { id: chatId } = msg.chat;
-  const text = msg.text.toString().toLowerCase();
-  console.log(text);
+  const { reply_to_message: replyToMessage, text, chat: { id: chatId } } = msg;
+
+  if (replyToMessage) {
+    const { text: replyText, from } = replyToMessage;
+
+    if (from.is_bot && replyText === 'Enter your Kindle email') {
+      console.log('Save email as', text);
+    }
+  }
 });
 
 bot.on('document', (msg) => {
