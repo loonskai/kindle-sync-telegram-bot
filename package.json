@@ -19,6 +19,7 @@
   "homepage": "https://github.com/SiarheiLunski/kindle-sync-telegram-bot#readme",
   "dependencies": {
     "dotenv": "^8.2.0",
+    "firebase-admin": "^9.4.2",
     "node-telegram-bot-api": "^0.51.0"
   },
   "devDependencies": {
