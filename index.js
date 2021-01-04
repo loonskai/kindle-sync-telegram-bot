@@ -1,16 +1,12 @@
 require('dotenv').config();
-
 const { spawn } = require('child_process');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const TelegramBot = require('node-telegram-bot-api');
+const db = require('./db');
 
-const {
-  HOST,
-  PORT,
-  TOKEN,
-} = process.env;
+const { HOST, PORT, TOKEN } = process.env;
 
 const bot = new TelegramBot(TOKEN, {
   webHook: {
@@ -69,20 +65,23 @@ bot.on('callback_query', (query) => {
   }
 });
 
-bot.onText(/\/info/, (msg) => {
+bot.onText(/\/info/, async (msg) => {
   const { id: chatId } = msg.chat;
+  const { id: userId } = await bot.getChat(chatId);
 
-  bot.sendMessage(chatId, 'Info');
+  const { email } = await db.getKindleUser({ id: userId });
+  bot.sendMessage(chatId, `Your kindle email is ${email}`);
 });
 
-bot.on('message', (msg) => {
+bot.on('message', async (msg) => {
   const { reply_to_message: replyToMessage, text, chat: { id: chatId } } = msg;
 
   if (replyToMessage) {
     const { text: replyText, from } = replyToMessage;
 
     if (from.is_bot && replyText === 'Enter your Kindle email') {
-      console.log('Save email as', text);
+      const { id } = await bot.getChat(chatId);
+      await db.saveKindleEmail({ id, email: text });
     }
   }
 });
@@ -102,8 +101,6 @@ bot.on('document', (msg) => {
   fileStream.pipe(writeStream);
 
   writeStream.on('close', () => {
-    console.log('Temporary file saved', tempPath);
-
     const child = spawn('ebook-convert', [tempPath, tempOutputPath]);
     child.stdout.on('close', () => {
       bot.sendDocument(chat.id, tempOutputPath, {}, {
