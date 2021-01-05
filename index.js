@@ -7,6 +7,8 @@ const path = require('path');
 const db = require('./db');
 const storage = require('./memoryStorage');
 const bot = require('./init');
+const { streamToString } = require('./utils/streams');
+const { parseNotebookJSON } = require('./utils/parser');
 
 bot.onText(/\/start/, (msg) => {
   bot.sendMessage(msg.chat.id, 'Configure', {
@@ -54,7 +56,13 @@ bot.on('callback_query', async (query) => {
     case 'select_notebook': {
       const messageId = callbackData;
       const fileId = await storage.getFileIdByMessageId(messageId);
-      console.log('fileId', fileId);
+      const fileStream = bot.getFileStream(fileId);
+      const htmlString = await streamToString(fileStream);
+
+      const notebookJSON = await parseNotebookJSON(htmlString);
+      console.log('notebookJSON', notebookJSON);
+
+      // await storage.deleteMessageId(messageId);
       bot.answerCallbackQuery(callbackQueryId);
       break;
     }
@@ -124,25 +132,18 @@ bot.on('document', async (msg) => {
       break;
     }
     case '.html': {
-      bot.sendMessage(chatId, 'Checking html file');
-      const fileStream = bot.getFileStream(fileId);
-      const tempPath = path.join(__dirname, fileName);
-      const writeStream = fs.createWriteStream(tempPath, { flags: 'w' });
-      fileStream.pipe(writeStream);
-      writeStream.on('close', async () => {
-        storage.saveFileId(messageId, fileId);
-        bot.sendMessage(chatId, 'What this is HTML file?', {
-          reply_markup: {
-            inline_keyboard: [
-              [
-                {
-                  text: 'Notebook',
-                  callback_data: `select_notebook ${messageId}`,
-                },
-              ],
+      storage.saveFileId(messageId, fileId);
+      bot.sendMessage(chatId, 'What should I do with this HTML file?', {
+        reply_markup: {
+          inline_keyboard: [
+            [
+              {
+                text: 'Parse it to JSON and update',
+                callback_data: `select_notebook ${messageId}`,
+              },
             ],
-          },
-        });
+          ],
+        },
       });
       break;
     }

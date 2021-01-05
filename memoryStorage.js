@@ -17,6 +17,6 @@ module.exports = {
     await redis.set(messageId, fileId);
   },
   async deleteMessageId(messageId) {
-    await redis.delete(messageId);
+    await redis.del(messageId);
   },
 };
