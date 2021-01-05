@@ -3,18 +3,10 @@ const { spawn } = require('child_process');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const TelegramBot = require('node-telegram-bot-api');
+
 const db = require('./db');
-
-const { HOST, PORT, TOKEN } = process.env;
-
-const bot = new TelegramBot(TOKEN, {
-  webHook: {
-    port: Number(PORT),
-  },
-});
-
-bot.setWebHook(`${HOST}/bot${TOKEN}`);
+const storage = require('./memoryStorage');
+const bot = require('./init');
 
 bot.onText(/\/start/, (msg) => {
   bot.sendMessage(msg.chat.id, 'Configure', {
@@ -32,8 +24,10 @@ bot.onText(/\/start/, (msg) => {
 });
 
 bot.on('callback_query', (query) => {
+  console.log(query);
   const { id: callbackQueryId, data, message } = query;
-  switch (data) {
+  const [callbackId, callbackData] = data.split(' ');
+  switch (callbackId) {
     case 'configure':
       bot.sendMessage(message.chat.id, 'Select configuration', {
         reply_markup: {
@@ -55,6 +49,10 @@ bot.on('callback_query', (query) => {
           force_reply: true,
         },
       });
+      bot.answerCallbackQuery(callbackQueryId);
+      break;
+    case 'select_notebook':
+      console.log('callbackData', callbackData);
       bot.answerCallbackQuery(callbackQueryId);
       break;
     default:
@@ -86,27 +84,65 @@ bot.on('message', async (msg) => {
   }
 });
 
-bot.on('document', (msg) => {
-  const { chat, document } = msg;
+bot.on('document', async (msg) => {
+  const {
+    message_id: messageId,
+    chat: {
+      id: chatId,
+    },
+    document: {
+      file_id: fileId,
+      file_name: fileName,
+    },
+  } = msg;
+  const { ext: extName, name: baseName } = path.parse(fileName);
+  const TEMPDIR = os.tmpdir();
 
-  bot.sendMessage(chat.id, 'Converting your book to .mobi...');
-  const fileTitle = document.file_name.match(/(.*).epub$/)[1];
+  switch (extName) {
+    case '.epub': {
+      bot.sendMessage(chatId, 'Converting your book to .mobi...');
+      const fileStream = bot.getFileStream(fileId);
+      const tempPath = path.join(TEMPDIR, fileName);
+      const convertedFilename = `${baseName}.mobi`;
+      const tempOutputPath = path.join(TEMPDIR, convertedFilename);
 
-  const fileStream = bot.getFileStream(document.file_id);
-  const tempPath = path.join(os.tmpdir(), document.file_name);
-  const convertedFilename = `${fileTitle}.mobi`;
-  const tempOutputPath = path.join(os.tmpdir(), convertedFilename);
+      const writeStream = fs.createWriteStream(tempPath, { flags: 'w' });
+      fileStream.pipe(writeStream);
 
-  const writeStream = fs.createWriteStream(tempPath, { flags: 'w' });
-  fileStream.pipe(writeStream);
-
-  writeStream.on('close', () => {
-    const child = spawn('ebook-convert', [tempPath, tempOutputPath]);
-    child.stdout.on('close', () => {
-      bot.sendDocument(chat.id, tempOutputPath, {}, {
-        filename: convertedFilename,
-        contentType: 'application/x-mobipocket-ebook',
+      writeStream.on('close', () => {
+        const child = spawn('ebook-convert', [tempPath, tempOutputPath]);
+        child.stdout.on('close', () => {
+          bot.sendDocument(chatId, tempOutputPath, {}, {
+            filename: convertedFilename,
+            contentType: 'application/x-mobipocket-ebook',
+          });
+        });
       });
-    });
-  });
+      break;
+    }
+    case '.html': {
+      bot.sendMessage(chatId, 'Checking html file');
+      const fileStream = bot.getFileStream(fileId);
+      const tempPath = path.join(__dirname, fileName);
+      const writeStream = fs.createWriteStream(tempPath, { flags: 'w' });
+      fileStream.pipe(writeStream);
+      writeStream.on('close', () => {
+        bot.sendMessage(chatId, 'What this is HTML file?', {
+          reply_markup: {
+            inline_keyboard: [
+              [
+                {
+                  text: 'Notebook',
+                  callback_data: `select_notebook ${messageId}`,
+                },
+              ],
+            ],
+          },
+        });
+      });
+      break;
+    }
+    default:
+      bot.sendMessage(chatId, 'Unsupported file extension');
+  }
 });
