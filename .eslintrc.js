@@ -14,5 +14,6 @@ module.exports = {
     'no-unused-vars': 1,
     semi: 2,
     quotes: [2, 'single'],
+    'import/no-extraneous-dependencies': 0,
   },
 };

@@ -23,7 +23,7 @@ bot.onText(/\/start/, (msg) => {
   });
 });
 
-bot.on('callback_query', (query) => {
+bot.on('callback_query', async (query) => {
   console.log(query);
   const { id: callbackQueryId, data, message } = query;
   const [callbackId, callbackData] = data.split(' ');
@@ -51,10 +51,13 @@ bot.on('callback_query', (query) => {
       });
       bot.answerCallbackQuery(callbackQueryId);
       break;
-    case 'select_notebook':
-      console.log('callbackData', callbackData);
+    case 'select_notebook': {
+      const messageId = callbackData;
+      const fileId = await storage.getFileIdByMessageId(messageId);
+      console.log('fileId', fileId);
       bot.answerCallbackQuery(callbackQueryId);
       break;
+    }
     default:
       bot.sendMessage(message.chat.id, 'Unknown operation');
       bot.onReplyToMessage(message.chat.id);
@@ -126,7 +129,8 @@ bot.on('document', async (msg) => {
       const tempPath = path.join(__dirname, fileName);
       const writeStream = fs.createWriteStream(tempPath, { flags: 'w' });
       fileStream.pipe(writeStream);
-      writeStream.on('close', () => {
+      writeStream.on('close', async () => {
+        storage.saveFileId(messageId, fileId);
         bot.sendMessage(chatId, 'What this is HTML file?', {
           reply_markup: {
             inline_keyboard: [

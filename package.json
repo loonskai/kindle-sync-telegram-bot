@@ -4,7 +4,7 @@
   "description": "Kindle sync Telegram bot",
   "main": "index.js",
   "scripts": {
-    "dev": "nodemon index.js",
+    "dev": "NODE_ENV=development ./bin/dev.js",
     "node": "node index.js"
   },
   "repository": {
@@ -28,6 +28,7 @@
     "eslint": "^7.17.0",
     "eslint-config-airbnb-base": "^14.2.1",
     "eslint-plugin-import": "^2.22.1",
+    "ngrok": "^3.4.0",
     "nodemon": "^2.0.6"
   }
 }

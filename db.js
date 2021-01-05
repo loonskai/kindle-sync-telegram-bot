@@ -12,9 +12,15 @@ const client = new MongoClient(mongoURI, {
   useUnifiedTopology: true,
 });
 
-client.connect(() => {
-  console.log('Connected to Mongo');
-});
+(async () => {
+  try {
+    await client.connect(() => {
+      console.log('Connected to Mongo');
+    });
+  } catch (err) {
+    console.log(err);
+  }
+})();
 
 module.exports = {
   async getKindleUser(id) {

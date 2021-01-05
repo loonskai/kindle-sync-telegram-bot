@@ -8,4 +8,15 @@ redis.on('connect', () => {
   console.log('Connected to Redis');
 });
 
-module.exports = {};
+module.exports = {
+  async getFileIdByMessageId(messageId) {
+    const result = await redis.get(messageId);
+    return result;
+  },
+  async saveFileId(messageId, fileId) {
+    await redis.set(messageId, fileId);
+  },
+  async deleteMessageId(messageId) {
+    await redis.delete(messageId);
+  },
+};

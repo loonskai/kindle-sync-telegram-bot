@@ -1,0 +1,2 @@
+- Install ngrok
+- Install calibre
