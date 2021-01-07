@@ -7,8 +7,10 @@ const path = require('path');
 const db = require('./db');
 const storage = require('./memoryStorage');
 const bot = require('./init');
+const { attachAndSendEmail } = require('./mail');
 const { streamToString } = require('./utils/streams');
 const { parseNotebookJSON } = require('./utils/parser');
+const { CALLBACK_DATA_ID } = require('./constants');
 
 bot.onText(/\/start/, (msg) => {
   bot.sendMessage(msg.chat.id, 'Configure', {
@@ -16,8 +18,8 @@ bot.onText(/\/start/, (msg) => {
       inline_keyboard: [
         [
           {
-            text: 'Configure',
-            callback_data: 'configure',
+            text: 'Configuration',
+            callback_data: CALLBACK_DATA_ID.CONFIGURATION,
           },
         ],
       ],
@@ -30,14 +32,14 @@ bot.on('callback_query', async (query) => {
   const { id: callbackQueryId, data, message } = query;
   const [callbackId, callbackData] = data.split(' ');
   switch (callbackId) {
-    case 'configure':
-      bot.sendMessage(message.chat.id, 'Select configuration', {
+    case CALLBACK_DATA_ID.CONFIGURATION:
+      bot.sendMessage(message.chat.id, 'Configuration', {
         reply_markup: {
           inline_keyboard: [
             [
               {
-                text: 'Set Kindle email',
-                callback_data: 'set_kindle_email',
+                text: 'Change Kindle email',
+                callback_data: CALLBACK_DATA_ID.SET_KINDLE_EMAIL,
               },
             ],
           ],
@@ -45,7 +47,7 @@ bot.on('callback_query', async (query) => {
       });
       bot.answerCallbackQuery(callbackQueryId);
       break;
-    case 'set_kindle_email':
+    case CALLBACK_DATA_ID.SET_KINDLE_EMAIL:
       bot.sendMessage(message.chat.id, 'Enter your Kindle email', {
         reply_markup: {
           force_reply: true,
@@ -53,7 +55,7 @@ bot.on('callback_query', async (query) => {
       });
       bot.answerCallbackQuery(callbackQueryId);
       break;
-    case 'select_notebook': {
+    case CALLBACK_DATA_ID.SELECT_NOTEBOOK: {
       const messageId = callbackData;
       const fileId = await storage.getFileIdByMessageId(messageId);
       const fileStream = bot.getFileStream(fileId);
@@ -89,8 +91,13 @@ bot.on('message', async (msg) => {
     const { text: replyText, from } = replyToMessage;
 
     if (from.is_bot && replyText === 'Enter your Kindle email') {
-      const { id } = await bot.getChat(chatId);
-      await db.saveKindleEmail({ id, email: text });
+      try {
+        const { id } = await bot.getChat(chatId);
+        await db.saveKindleEmail({ id, email: text });
+        bot.sendMessage(chatId, 'Email updated successfully');
+      } catch (err) {
+        bot.sendMessage(chatId, 'Couldn\'t update the email. Check if it\'s valid or check bot logs.');
+      }
     }
   }
 });
@@ -122,11 +129,33 @@ bot.on('document', async (msg) => {
 
       writeStream.on('close', () => {
         const child = spawn('ebook-convert', [tempPath, tempOutputPath]);
-        child.stdout.on('close', () => {
-          bot.sendDocument(chatId, tempOutputPath, {}, {
-            filename: convertedFilename,
-            contentType: 'application/x-mobipocket-ebook',
-          });
+        child.stdout.on('close', async () => {
+          const { id: userId } = await bot.getChat(chatId);
+          const { email } = await db.getKindleUser({ id: userId });
+
+          try {
+            await attachAndSendEmail(email, {
+              path: tempOutputPath,
+              type: 'application/x-mobipocket-ebook',
+              filename: convertedFilename,
+            });
+            bot.sendDocument(chatId, tempOutputPath,
+              {
+                caption: 'Converted .mobi file was sent to your Kindle account.',
+              }, {
+                filename: convertedFilename,
+                contentType: 'application/x-mobipocket-ebook',
+              });
+          } catch (err) {
+            bot.sendDocument(chatId, tempOutputPath,
+              {
+                caption: 'Unable to send the file to your Kindle account. Check logs for more details.',
+              },
+              {
+                filename: convertedFilename,
+                contentType: 'application/x-mobipocket-ebook',
+              });
+          }
         });
       });
       break;
@@ -139,7 +168,7 @@ bot.on('document', async (msg) => {
             [
               {
                 text: 'Parse it to JSON and update',
-                callback_data: `select_notebook ${messageId}`,
+                callback_data: `${CALLBACK_DATA_ID.SELECT_NOTEBOOK} ${messageId}`,
               },
             ],
           ],

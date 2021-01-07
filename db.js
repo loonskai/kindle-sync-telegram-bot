@@ -1,4 +1,5 @@
 const { MongoClient } = require('mongodb');
+const { validateEmail } = require('./mail');
 
 const {
   MONGO_USER,
@@ -29,9 +30,14 @@ module.exports = {
     return data;
   },
   async saveKindleEmail({ id, email }) {
+    if (!validateEmail(email)) throw new Error('Invalid email format');
+
     const collection = await client.db(MONGO_DBNAME).collection('kindle-users');
-    // TODO: Validate email format
-    const result = await collection.insertOne({ id, email });
+    const result = await collection.updateOne(
+      { id },
+      { $set: { id, email } },
+      { upsert: true },
+    );
     return result;
   },
 };
