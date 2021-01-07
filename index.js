@@ -1,30 +1,35 @@
 require('dotenv').config();
-const { spawn } = require('child_process');
-const fs = require('fs');
-const os = require('os');
+
 const path = require('path');
 
+const { FILE } = require('dns');
 const db = require('./db');
 const storage = require('./memoryStorage');
 const bot = require('./init');
 const { attachAndSendEmail } = require('./mail');
 const { streamToString } = require('./utils/streams');
 const { parseNotebookJSON } = require('./utils/parser');
-const { CALLBACK_DATA_ID } = require('./constants');
+const { validateEmail } = require('./utils/validations');
+const { convert } = require('./bookConverter');
+const { CALLBACK_DATA_ID, CONTENT_TYPES, FILE_FORMATS } = require('./constants');
+const MESSAGES = require('./messages');
 
 bot.onText(/\/start/, (msg) => {
-  bot.sendMessage(msg.chat.id, 'Configure', {
-    reply_markup: {
-      inline_keyboard: [
-        [
-          {
-            text: 'Configuration',
-            callback_data: CALLBACK_DATA_ID.CONFIGURATION,
-          },
-        ],
-      ],
-    },
-  });
+  const { id: chatId } = msg.chat;
+  bot.sendMessage(
+    chatId,
+    MESSAGES.START.text,
+    MESSAGES.START.options,
+  );
+});
+
+bot.onText(/\/settings/, (msg) => {
+  const { id: chatId } = msg.chat;
+  bot.sendMessage(
+    chatId,
+    MESSAGES.SETTINGS.text,
+    MESSAGES.SETTINGS.options,
+  );
 });
 
 bot.on('callback_query', async (query) => {
@@ -32,27 +37,20 @@ bot.on('callback_query', async (query) => {
   const { id: callbackQueryId, data, message } = query;
   const [callbackId, callbackData] = data.split(' ');
   switch (callbackId) {
-    case CALLBACK_DATA_ID.CONFIGURATION:
-      bot.sendMessage(message.chat.id, 'Configuration', {
-        reply_markup: {
-          inline_keyboard: [
-            [
-              {
-                text: 'Change Kindle email',
-                callback_data: CALLBACK_DATA_ID.SET_KINDLE_EMAIL,
-              },
-            ],
-          ],
-        },
-      });
+    case CALLBACK_DATA_ID.SETTINGS:
+      bot.sendMessage(
+        message.chat.id,
+        MESSAGES.SETTINGS.text,
+        MESSAGES.SETTINGS.options,
+      );
       bot.answerCallbackQuery(callbackQueryId);
       break;
     case CALLBACK_DATA_ID.SET_KINDLE_EMAIL:
-      bot.sendMessage(message.chat.id, 'Enter your Kindle email', {
-        reply_markup: {
-          force_reply: true,
-        },
-      });
+      bot.sendMessage(
+        message.chat.id,
+        MESSAGES.CHANGE_EMAIL.text,
+        MESSAGES.CHANGE_EMAIL.options,
+      );
       bot.answerCallbackQuery(callbackQueryId);
       break;
     case CALLBACK_DATA_ID.SELECT_NOTEBOOK: {
@@ -69,7 +67,7 @@ bot.on('callback_query', async (query) => {
       break;
     }
     default:
-      bot.sendMessage(message.chat.id, 'Unknown operation');
+      bot.sendMessage(message.chat.id, MESSAGES.ERRORS.UNKNOWN_OPERATION.text);
       bot.onReplyToMessage(message.chat.id);
       bot.answerCallbackQuery(callbackQueryId);
       break;
@@ -90,13 +88,18 @@ bot.on('message', async (msg) => {
   if (replyToMessage) {
     const { text: replyText, from } = replyToMessage;
 
-    if (from.is_bot && replyText === 'Enter your Kindle email') {
+    if (from.is_bot && replyText === MESSAGES.CHANGE_EMAIL.text) {
       try {
         const { id } = await bot.getChat(chatId);
+        const isValidEmail = validateEmail(text);
+        if (!isValidEmail) {
+          bot.sendMessage(chatId, MESSAGES.ERRORS.INVALID_EMAIL.text);
+          return;
+        }
         await db.saveKindleEmail({ id, email: text });
-        bot.sendMessage(chatId, 'Email updated successfully');
+        bot.sendMessage(chatId, MESSAGES.SUCCESS.EMAIL_UPDATED.text);
       } catch (err) {
-        bot.sendMessage(chatId, 'Couldn\'t update the email. Check if it\'s valid or check bot logs.');
+        bot.sendMessage(chatId, MESSAGES.ERRORS.EMAIL_ADDRESS_UPDATE_ERROR.text);
       }
     }
   }
@@ -113,70 +116,66 @@ bot.on('document', async (msg) => {
       file_name: fileName,
     },
   } = msg;
-  const { ext: extName, name: baseName } = path.parse(fileName);
-  const TEMPDIR = os.tmpdir();
 
-  switch (extName) {
-    case '.epub': {
-      bot.sendMessage(chatId, 'Converting your book to .mobi...');
+  switch (path.extname(fileName)) {
+    // TODO: Add options for .epub files: "Convert", "Convert and send"
+    case FILE_FORMATS.epub: {
+      bot.sendMessage(chatId, MESSAGES.STATUS.FILE_BEING_CONVERTING.text);
       const fileStream = bot.getFileStream(fileId);
-      const tempPath = path.join(TEMPDIR, fileName);
-      const convertedFilename = `${baseName}.mobi`;
-      const tempOutputPath = path.join(TEMPDIR, convertedFilename);
-
-      const writeStream = fs.createWriteStream(tempPath, { flags: 'w' });
-      fileStream.pipe(writeStream);
-
-      writeStream.on('close', () => {
-        const child = spawn('ebook-convert', [tempPath, tempOutputPath]);
-        child.stdout.on('close', async () => {
-          const { id: userId } = await bot.getChat(chatId);
-          const { email } = await db.getKindleUser({ id: userId });
-
-          try {
-            await attachAndSendEmail(email, {
-              path: tempOutputPath,
-              type: 'application/x-mobipocket-ebook',
-              filename: convertedFilename,
-            });
-            bot.sendDocument(chatId, tempOutputPath,
-              {
-                caption: 'Converted .mobi file was sent to your Kindle account.',
-              }, {
-                filename: convertedFilename,
-                contentType: 'application/x-mobipocket-ebook',
-              });
-          } catch (err) {
-            bot.sendDocument(chatId, tempOutputPath,
-              {
-                caption: 'Unable to send the file to your Kindle account. Check logs for more details.',
-              },
-              {
-                filename: convertedFilename,
-                contentType: 'application/x-mobipocket-ebook',
-              });
-          }
+      try {
+        const { convertedFileName, convertedFilePath } = await convert({
+          inputFileName: fileName,
+          inputFileStream: fileStream,
+          outputFormat: FILE_FORMATS.mobi,
         });
-      });
+        const { id: userId } = await bot.getChat(chatId);
+        const { email } = await db.getKindleUser({ id: userId });
+
+        try {
+          await attachAndSendEmail(email, {
+            path: convertedFilePath,
+            type: CONTENT_TYPES.mobi,
+            filename: convertedFileName,
+          });
+          bot.sendDocument(
+            chatId,
+            convertedFilePath,
+            { caption: MESSAGES.SUCCESS.FILE_SENT.text },
+            {
+              filename: convertedFileName,
+              contentType: CONTENT_TYPES.mobi,
+            },
+          );
+        } catch (emailError) {
+          bot.sendDocument(
+            chatId,
+            convertedFilePath,
+            { caption: MESSAGES.ERRORS.EMAIL_NOT_SENT.text },
+            {
+              filename: convertedFileName,
+              contentType: CONTENT_TYPES.mobi,
+            },
+          );
+        }
+      } catch (fileError) {
+        bot.sendMessage(chatId, MESSAGES.ERRORS.FILE_CONVERSION_ERROR.text);
+      }
       break;
     }
-    case '.html': {
+    case FILE_FORMATS.mobi: {
+      // TODO: Send to kindle
+      break;
+    }
+    case FILE_FORMATS.html: {
       storage.saveFileId(messageId, fileId);
-      bot.sendMessage(chatId, 'What should I do with this HTML file?', {
-        reply_markup: {
-          inline_keyboard: [
-            [
-              {
-                text: 'Parse it to JSON and update',
-                callback_data: `${CALLBACK_DATA_ID.SELECT_NOTEBOOK} ${messageId}`,
-              },
-            ],
-          ],
-        },
-      });
+      bot.sendMessage(
+        chatId,
+        MESSAGES.FILE_RECEIVED_HTML.text,
+        MESSAGES.FILE_RECEIVED_HTML.getOptions(messageId),
+      );
       break;
     }
     default:
-      bot.sendMessage(chatId, 'Unsupported file extension');
+      bot.sendMessage(chatId, MESSAGES.ERRORS.UNSUPPORTED_FILE.text);
   }
 });
