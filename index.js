@@ -2,12 +2,11 @@ require('dotenv').config();
 
 const path = require('path');
 
-const { FILE } = require('dns');
 const db = require('./db');
 const storage = require('./memoryStorage');
 const bot = require('./init');
 const { attachAndSendEmail } = require('./mail');
-const { streamToString } = require('./utils/streams');
+const { streamToString, saveTemporaryFile } = require('./utils/streams');
 const { parseNotebookJSON } = require('./utils/parser');
 const { validateEmail } = require('./utils/validations');
 const { convert } = require('./bookConverter');
@@ -120,7 +119,7 @@ bot.on('document', async (msg) => {
   switch (path.extname(fileName)) {
     // TODO: Add options for .epub files: "Convert", "Convert and send"
     case FILE_FORMATS.epub: {
-      bot.sendMessage(chatId, MESSAGES.STATUS.FILE_BEING_CONVERTING.text);
+      bot.sendMessage(chatId, MESSAGES.STATUS.FILE_BEING_CONVERTED.text);
       const fileStream = bot.getFileStream(fileId);
       try {
         const { convertedFileName, convertedFilePath } = await convert({
@@ -132,6 +131,7 @@ bot.on('document', async (msg) => {
         const { email } = await db.getKindleUser({ id: userId });
 
         try {
+          bot.sendMessage(chatId, MESSAGES.STATUS.FILE_BEING_SENT.text);
           await attachAndSendEmail(email, {
             path: convertedFilePath,
             type: CONTENT_TYPES.mobi,
@@ -163,7 +163,22 @@ bot.on('document', async (msg) => {
       break;
     }
     case FILE_FORMATS.mobi: {
-      // TODO: Send to kindle
+      const fileStream = bot.getFileStream(fileId);
+      const { id: userId } = await bot.getChat(chatId);
+      const { email } = await db.getKindleUser({ id: userId });
+      const tempFilePath = await saveTemporaryFile({ inputFileStream: fileStream, fileName });
+
+      bot.sendMessage(chatId, MESSAGES.STATUS.FILE_BEING_SENT.text);
+      try {
+        await attachAndSendEmail(email, {
+          path: tempFilePath,
+          type: CONTENT_TYPES.mobi,
+          filename: fileName,
+        });
+        bot.sendMessage(chatId, MESSAGES.SUCCESS.FILE_SENT.text);
+      } catch (error) {
+        bot.sendMessage(chatId, MESSAGES.ERRORS.EMAIL_NOT_SENT.text);
+      }
       break;
     }
     case FILE_FORMATS.html: {

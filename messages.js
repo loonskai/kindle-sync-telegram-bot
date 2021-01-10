@@ -59,13 +59,16 @@ module.exports = {
     }),
   },
   STATUS: {
-    FILE_BEING_CONVERTING: {
-      text: 'Converting file ...',
+    FILE_BEING_CONVERTED: {
+      text: 'Converting file...',
+    },
+    FILE_BEING_SENT: {
+      text: 'Sending to your Kindle email ...',
     },
   },
   SUCCESS: {
     FILE_SENT: {
-      text: 'Converted .mobi file has been sent to your Kindle account.',
+      text: 'File has been sent to your Kindle account.',
     },
     EMAIL_UPDATED: {
       text: 'Email has been updated.',
