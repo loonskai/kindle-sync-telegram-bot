@@ -129,6 +129,8 @@ bot.on('document', async (msg) => {
         });
         const { id: userId } = await bot.getChat(chatId);
         const { email } = await db.getKindleUser({ id: userId });
+        console.log('convertedFileName', convertedFileName);
+        console.log('convertedFilePath', convertedFilePath);
 
         try {
           bot.sendMessage(chatId, MESSAGES.STATUS.FILE_BEING_SENT.text);
