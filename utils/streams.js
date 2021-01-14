@@ -7,7 +7,10 @@ const streamToString = async (readableStream, encoding = 'utf-8') => {
 
   return new Promise((resolve, reject) => {
     readableStream.on('data', (data) => chunks.push(data));
-    readableStream.on('error', (err) => reject(err));
+    readableStream.on('error', (err) => {
+      console.log('Error converting stream to string', err);
+      reject(err);
+    });
     readableStream.on('end', () => {
       const result = Buffer.concat(chunks).toString(encoding);
       resolve(result);
@@ -22,9 +25,12 @@ const saveTemporaryFile = ({ inputFileStream, fileName }) => new Promise((resolv
   const writeStream = fs.createWriteStream(tempFilePath, { flags: 'w' });
   inputFileStream.pipe(writeStream);
 
-  // TODO: Add error handling for local saving
   writeStream.on('close', () => {
     resolve(tempFilePath);
+  });
+  writeStream.on('error', (err) => {
+    console.log('Error saving temp file', err);
+    reject(err);
   });
 });
 
