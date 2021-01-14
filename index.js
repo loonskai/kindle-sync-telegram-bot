@@ -129,8 +129,6 @@ bot.on('document', async (msg) => {
         });
         const { id: userId } = await bot.getChat(chatId);
         const { email } = await db.getKindleUser({ id: userId });
-        console.log('convertedFileName', convertedFileName);
-        console.log('convertedFilePath', convertedFilePath);
 
         try {
           bot.sendMessage(chatId, MESSAGES.STATUS.FILE_BEING_SENT.text);
@@ -147,7 +145,10 @@ bot.on('document', async (msg) => {
               filename: convertedFileName,
               contentType: CONTENT_TYPES.mobi,
             },
-          );
+          ).catch((error) => {
+            console.log(error.code);
+            console.log(error.response.body);
+          });
         } catch (emailError) {
           bot.sendDocument(
             chatId,
@@ -157,10 +158,17 @@ bot.on('document', async (msg) => {
               filename: convertedFileName,
               contentType: CONTENT_TYPES.mobi,
             },
-          );
+          ).catch((error) => {
+            console.log(error.code);
+            console.log(error.response.body);
+          });
         }
       } catch (fileError) {
-        bot.sendMessage(chatId, MESSAGES.ERRORS.FILE_CONVERSION_ERROR.text);
+        bot.sendMessage(chatId, MESSAGES.ERRORS.FILE_CONVERSION_ERROR.text)
+          .catch((error) => {
+            console.log(error.code);
+            console.log(error.response.body);
+          });
       }
       break;
     }
