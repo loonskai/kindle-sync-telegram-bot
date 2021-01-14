@@ -8,7 +8,9 @@ sgMail.setApiKey(SENDGRID_API_KEY);
 const attachAndSendEmail = async (toEmail, { path, filename, type }) => new Promise(
   (resolve, reject) => {
     fs.readFile(path, async (err, data) => {
+      console.log('data ---', data);
       if (err) {
+        console.log('Unable to read file', err);
         reject(new Error('Unable to read file', path));
       } else {
         const msg = {
@@ -27,7 +29,7 @@ const attachAndSendEmail = async (toEmail, { path, filename, type }) => new Prom
           await sgMail.send(msg);
           resolve();
         } catch (mailError) {
-          console.log(mailError);
+          console.log('Unable to send email', mailError);
           if (mailError.response) {
             console.log(mailError.response.body);
           }

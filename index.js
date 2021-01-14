@@ -150,6 +150,7 @@ bot.on('document', async (msg) => {
             console.log(error.response.body);
           });
         } catch (emailError) {
+          console.log('emailError', emailError);
           bot.sendDocument(
             chatId,
             convertedFilePath,
@@ -164,6 +165,7 @@ bot.on('document', async (msg) => {
           });
         }
       } catch (fileError) {
+        console.log('fileError', fileError);
         bot.sendMessage(chatId, MESSAGES.ERRORS.FILE_CONVERSION_ERROR.text)
           .catch((error) => {
             console.log(error.code);
